@@ -21,7 +21,7 @@ func fileTyp(typ string) string {
 	}
 }
 
-func getUnmarshalFunc(typ string) UnmarshalFunc {
+func GetUnmarshalFunc(typ string) UnmarshalFunc {
 	var umf UnmarshalFunc = nil
 	// choose UnmarshalFunc
 	switch typ {
