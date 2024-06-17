@@ -2,6 +2,7 @@ package si18n
 
 import (
 	"golang.org/x/text/language"
+	"strings"
 	"testing"
 )
 
@@ -84,5 +85,11 @@ func TestBundle_LoadMap(t *testing.T) {
 	keys := getExampleCorrectMapKeys()
 	for _, v := range keys {
 		equals(m[v], bundle.TR(v, nil), t)
+	}
+	prefix := "0"
+	bundle.LoadMap(getExampleCorrectMap(), prefix)
+	for _, v := range keys {
+		k := strings.Join([]string{prefix, v}, ".")
+		equals(m[v], bundle.TR(k, nil), t)
 	}
 }

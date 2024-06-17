@@ -138,7 +138,13 @@ func (b *Bundle) LoadBytes(bs []byte, umf UnmarshalFunc) error {
 }
 
 func (b *Bundle) LoadMap(m map[string]any, prefix string) {
-	b.flatten(prefix, m)
+	for k, v := range m {
+		if len(prefix) == 0 {
+			b.flatten(k, v)
+		} else {
+			b.flatten(strings.Join([]string{prefix, k}, "."), v)
+		}
+	}
 }
 
 func (b *Bundle) LoadFs(f *embed.FS) error {
