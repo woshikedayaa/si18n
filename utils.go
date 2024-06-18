@@ -62,7 +62,54 @@ func getSystemLocales() string {
 	}
 }
 
-type LRU struct {
-	list list.List
-	m    map[string]string
+type LRUCache struct {
+	capacity  int
+	list      *list.List
+	keyToNode map[string]*list.Element
+}
+
+type entry struct {
+	key string
+	val string
+}
+
+func newLRUCache(capacity int) *LRUCache {
+	lru := &LRUCache{
+		capacity:  capacity,
+		list:      list.New(),
+		keyToNode: make(map[string]*list.Element, capacity),
+	}
+	return lru
+}
+func (lru *LRUCache) Len() int {
+	return lru.list.Len()
+}
+
+func (lru *LRUCache) Cap() int {
+	return lru.capacity
+}
+
+func (lru *LRUCache) Get(key string) (string, bool) {
+	if lru.Len() == 0 {
+		return "", false
+	}
+	node, ok := lru.keyToNode[key]
+	if !ok {
+		return "", false
+	}
+	lru.list.MoveToFront(node)
+	return node.Value.(entry).val, true
+}
+
+func (lru *LRUCache) Put(key, val string) {
+	if node, ok := lru.keyToNode[key]; ok {
+		// update
+		node.Value = entry{key, val}
+		lru.list.MoveToFront(node)
+		return
+	}
+	lru.keyToNode[key] = lru.list.PushFront(entry{key, val})
+	if lru.Len() > lru.Cap() {
+		delete(lru.keyToNode, lru.list.Remove(lru.list.Back()).(entry).key)
+	}
 }
