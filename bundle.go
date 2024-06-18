@@ -28,7 +28,7 @@ type Bundle struct {
 }
 
 var (
-	global *Bundle = New(SystemLanguage())
+	global = New(SystemLanguage())
 )
 
 func (b *Bundle) flatten(prefix string, data any) {
@@ -255,7 +255,15 @@ func (b *Bundle) loadDir(dir string) error {
 }
 
 func (b *Bundle) TR(key string, arg map[string]string) string {
-	return b.all[key]
+	che, ok := b.cache.Get(key)
+	if ok {
+		return che
+	}
+	res, ok := b.all[key]
+	if ok {
+		b.cache.Put(key, res)
+	}
+	return res
 }
 
 func (b *Bundle) GetAllTR() map[string]string {
@@ -269,7 +277,7 @@ func (b *Bundle) Language() language.Tag {
 func New(tag language.Tag) *Bundle {
 	return &Bundle{
 		lang:  tag,
-		cache: new(LRUCache),
+		cache: newLRUCache(64),
 		all:   make(map[string]string),
 	}
 }
