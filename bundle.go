@@ -23,7 +23,7 @@ var (
 
 type Bundle struct {
 	lang  language.Tag
-	cache *LRU
+	cache *LRUCache
 	all   map[string]string
 }
 
@@ -269,7 +269,7 @@ func (b *Bundle) Language() language.Tag {
 func New(tag language.Tag) *Bundle {
 	return &Bundle{
 		lang:  tag,
-		cache: new(LRU),
+		cache: new(LRUCache),
 		all:   make(map[string]string),
 	}
 }
