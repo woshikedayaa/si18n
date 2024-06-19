@@ -31,6 +31,34 @@ var (
 	global = New(SystemLanguage())
 )
 
+func LoadFile(path string) error {
+	return global.LoadFile(path)
+}
+
+func LoadFS(fs *embed.FS) error {
+	return global.LoadFs(fs)
+}
+
+func LoadMap(m map[string]any, prefix string) {
+	global.LoadMap(m, prefix)
+}
+
+func LoadDir(dir string) error {
+	return global.loadDir(dir)
+}
+
+func GetAllTR() map[string]string {
+	return global.GetAllTR()
+}
+
+func TR(key string, ms ...map[string]any) string {
+	return global.TR(key, ms...)
+}
+
+func Language() language.Tag {
+	return global.Language()
+}
+
 func (b *Bundle) flatten(prefix string, data any) {
 	switch val := data.(type) {
 	case string:
@@ -254,7 +282,7 @@ func (b *Bundle) loadDir(dir string) error {
 	})
 }
 
-func (b *Bundle) TR(key string, arg map[string]string) string {
+func (b *Bundle) TR(key string, arg ...map[string]any) string {
 	che, ok := b.cache.Get(key)
 	if ok {
 		return che
