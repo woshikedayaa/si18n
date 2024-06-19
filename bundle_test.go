@@ -1,7 +1,6 @@
 package si18n
 
 import (
-	"golang.org/x/text/language"
 	"strings"
 	"testing"
 )
@@ -29,67 +28,55 @@ func getExampleCorrectMap() map[string]any {
 	}
 }
 
-func getExampleCorrectMapKeys() []string {
-	m := getExampleCorrectMap()
-	res := make([]string, 0, len(m))
-	for k, _ := range m {
-		res = append(res, k)
-	}
-	return res
-}
-
 func TestBundle_LoadFile(t *testing.T) {
 	dir := makeTmpDir(t)
 	defer dir.RemoveAll()
-	file := dir.CreateFile("zh-Hans.yaml")
+	file := dir.CreateFile(SystemLanguage().String() + ".yaml")
 	notNil(file, t)
 	_, err := file.Write([]byte(getExampleFileString()))
 	isNil(err, t)
-	bundle := New(language.SimplifiedChinese)
+	bundle := New(SystemLanguage())
 	notNil(bundle, t)
 
 	err = bundle.loadFile(file.Name())
 	isNil(err, t)
 	m := getExampleCorrectMap()
-	keys := getExampleCorrectMapKeys()
-	for _, v := range keys {
-		equals(m[v], bundle.TR(v, nil), t)
+	for k, v := range m {
+		equals(v, bundle.TR(k, nil), t)
 	}
 }
 
 func TestBundle_LoadDir(t *testing.T) {
 	dir := makeTmpDir(t)
 	defer dir.RemoveAll()
-	langDir := dir.SubTmpDir("zh-Hans", t)
+	langDir := dir.SubTmpDir(SystemLanguage().String(), t)
 	defer langDir.RemoveAll()
 	file := langDir.CreateFile("test.yaml")
 	notNil(file, t)
 	_, err := file.Write([]byte(getExampleFileString()))
 	isNil(err, t)
-	bundle := New(language.SimplifiedChinese)
+	bundle := New(SystemLanguage())
 	notNil(bundle, t)
 
 	err = bundle.LoadDir(dir.Path())
 	isNil(err, t)
 	m := getExampleCorrectMap()
-	keys := getExampleCorrectMapKeys()
-	for _, v := range keys {
-		equals(m[v], bundle.TR(v, nil), t)
+	for k, v := range m {
+		equals(v, bundle.TR(k, nil), t)
 	}
 }
 
 func TestBundle_LoadMap(t *testing.T) {
-	bundle := New(language.SimplifiedChinese)
+	bundle := New(SystemLanguage())
 	bundle.LoadMap(getExampleCorrectMap(), "")
 	m := getExampleCorrectMap()
-	keys := getExampleCorrectMapKeys()
-	for _, v := range keys {
-		equals(m[v], bundle.TR(v, nil), t)
+	for k, v := range m {
+		equals(v, bundle.TR(k, nil), t)
 	}
 	prefix := "0"
 	bundle.LoadMap(getExampleCorrectMap(), prefix)
-	for _, v := range keys {
-		k := strings.Join([]string{prefix, v}, ".")
-		equals(m[v], bundle.TR(k, nil), t)
+	for key, v := range m {
+		k := strings.Join([]string{prefix, key}, ".")
+		equals(v, bundle.TR(k, nil), t)
 	}
 }
