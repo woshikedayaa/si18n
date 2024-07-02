@@ -42,7 +42,11 @@ func TestBundle_LoadFile(t *testing.T) {
 	isNil(err, t)
 	m := getExampleCorrectMap()
 	for k, v := range m {
-		equals(v, bundle.TR(k, nil), t)
+		equals(v, bundle.TryTr(k), t)
+		equals(v, bundle.MustTr(k), t)
+		tr, err := bundle.Tr(k)
+		isNil(err, t)
+		equals(v, tr, t)
 	}
 }
 
@@ -58,25 +62,65 @@ func TestBundle_LoadDir(t *testing.T) {
 	bundle := New(SystemLanguage())
 	notNil(bundle, t)
 
-	err = bundle.LoadDir(dir.Path())
+	err = bundle.LoadFromDir(dir.Path())
 	isNil(err, t)
 	m := getExampleCorrectMap()
 	for k, v := range m {
-		equals(v, bundle.TR(k, nil), t)
+		equals(v, bundle.TryTr(k), t)
+		equals(v, bundle.MustTr(k), t)
+		tr, err := bundle.Tr(k)
+		isNil(err, t)
+		equals(v, tr, t)
 	}
 }
 
 func TestBundle_LoadMap(t *testing.T) {
 	bundle := New(SystemLanguage())
-	bundle.LoadMap(getExampleCorrectMap(), "")
+	bundle.LoadFromMap(getExampleCorrectMap(), "")
 	m := getExampleCorrectMap()
 	for k, v := range m {
-		equals(v, bundle.TR(k, nil), t)
+		equals(v, bundle.TryTr(k), t)
 	}
 	prefix := "0"
-	bundle.LoadMap(getExampleCorrectMap(), prefix)
+	bundle.LoadFromMap(getExampleCorrectMap(), prefix)
 	for key, v := range m {
 		k := strings.Join([]string{prefix, key}, ".")
-		equals(v, bundle.TR(k, nil), t)
+		equals(v, bundle.TryTr(k), t)
+	}
+}
+
+func TestBundle_TrWithTemplate(t *testing.T) {
+	s := `
+a: 
+  b:
+    1: "{{.test}}"
+    2: "{{.test}}"
+    3: "{{.test}}"
+    c: 
+      1: "{{.test}}"
+      2: "{{.test}}"
+`
+
+	dir := makeTmpDir(t)
+	defer dir.RemoveAll()
+	file := dir.CreateFile(SystemLanguage().String() + ".yaml")
+	notNil(file, t)
+	_, err := file.Write([]byte(s))
+	isNil(err, t)
+	bundle := New(SystemLanguage())
+	notNil(bundle, t)
+
+	err = bundle.loadFile(file.Name())
+	isNil(err, t)
+	m := getExampleCorrectMap()
+	for k, v := range m {
+		ms := map[string]any{
+			"test": v,
+		}
+		equals(v, bundle.TryTr(k, ms), t)
+		equals(v, bundle.MustTr(k, ms), t)
+		tr, err := bundle.Tr(k, ms)
+		isNil(err, t)
+		equals(v, tr, t)
 	}
 }

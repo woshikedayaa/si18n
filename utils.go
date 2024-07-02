@@ -62,6 +62,10 @@ func getSystemLocales() string {
 	}
 }
 
+func DefaultLanguage() language.Tag {
+	return SystemLanguage()
+}
+
 type LRUCache struct {
 	capacity  int
 	list      *list.List
@@ -70,7 +74,7 @@ type LRUCache struct {
 
 type entry struct {
 	key string
-	val string
+	val *MessageObject
 }
 
 func newLRUCache(capacity int) *LRUCache {
@@ -89,19 +93,19 @@ func (lru *LRUCache) Cap() int {
 	return lru.capacity
 }
 
-func (lru *LRUCache) Get(key string) (string, bool) {
+func (lru *LRUCache) Get(key string) (*MessageObject, bool) {
 	if lru.Len() == 0 {
-		return "", false
+		return nil, false
 	}
 	node, ok := lru.keyToNode[key]
 	if !ok {
-		return "", false
+		return nil, false
 	}
 	lru.list.MoveToFront(node)
 	return node.Value.(entry).val, true
 }
 
-func (lru *LRUCache) Put(key, val string) {
+func (lru *LRUCache) Put(key string, val *MessageObject) {
 	if node, ok := lru.keyToNode[key]; ok {
 		// update
 		node.Value = entry{key, val}
@@ -112,4 +116,31 @@ func (lru *LRUCache) Put(key, val string) {
 	if lru.Len() > lru.Cap() {
 		delete(lru.keyToNode, lru.list.Remove(lru.list.Back()).(entry).key)
 	}
+}
+
+func (lru *LRUCache) Remove(key string) bool {
+	if lru.Len() == 0 {
+		return false
+	}
+	var (
+		node *list.Element
+		ok   bool
+	)
+	if node, ok = lru.keyToNode[key]; !ok {
+		return false
+	}
+	delete(lru.keyToNode, lru.list.Remove(node).(entry).key)
+	return true
+}
+
+func mergeMap(ms ...map[string]any) map[string]any {
+	if len(ms) == 0 {
+		return nil
+	}
+	for i := 1; i < len(ms); i++ {
+		for k, v := range ms[i] {
+			ms[0][k] = v
+		}
+	}
+	return ms[0]
 }
