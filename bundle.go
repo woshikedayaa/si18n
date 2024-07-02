@@ -5,11 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"golang.org/x/text/language"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
 	"slices"
 	"strings"
+	"sync"
+	"text/template"
 )
 
 var (
@@ -18,54 +21,115 @@ var (
 	ErrTargetIsRegular             = errors.New("target path is a regular file")
 	ErrTargetIsDir                 = errors.New("target path is a dir")
 	ErrIncorrectBytesUnmarshalFunc = errors.New("incorrect bytes unmarshaler")
+	ErrNotFound                    = errors.New("can not found translation for this key")
 	ErrKeyType                     = errors.New("key type incorrect,except: float int string")
 )
 
+type MessageObject struct {
+	updated bool
+	key     string
+	val     string
+	tmpl    *template.Template
+}
+
+func NewMessage(key, val string) *MessageObject {
+	return &MessageObject{
+		updated: true,
+		key:     key,
+		val:     val,
+		tmpl:    nil,
+	}
+}
+
+func (m *MessageObject) Update() {
+	if !m.updated {
+		return
+	}
+	m.tmpl = nil
+	m.updated = false
+}
+
+func (m *MessageObject) Template() (*template.Template, error) {
+	if m.tmpl != nil && !m.updated {
+		return m.tmpl, nil
+	}
+	parse, err := template.New(m.key).Parse(m.val)
+	if err != nil {
+		return nil, err
+	}
+	m.tmpl = parse
+	return parse, nil
+}
+
+func (m *MessageObject) MustTemplate() *template.Template {
+	if tmpl, err := m.Template(); err != nil {
+		panic(err)
+	} else {
+		return tmpl
+	}
+}
+
 type Bundle struct {
-	lang  language.Tag
-	cache *LRUCache
-	all   map[string]string
+	lang       language.Tag
+	cache      *LRUCache
+	all        map[string]*MessageObject
+	lock       *sync.RWMutex
+	updateList []string
 }
 
 var (
-	global = New(SystemLanguage())
+	defaultLanguage = SystemLanguage()
+	global          = New(defaultLanguage)
 )
 
-func LoadFile(path string) error {
-	return global.LoadFile(path)
+func SwitchDefaultLanguage(lang language.Tag) {
+	global = New(lang)
+	defaultLanguage = lang
 }
 
-func LoadFS(fs *embed.FS) error {
-	return global.LoadFs(fs)
+func LoadFromFile(path string) error {
+	return global.LoadFromFile(path)
 }
 
-func LoadMap(m map[string]any, prefix string) {
-	global.LoadMap(m, prefix)
+func LoadFromFS(fs *embed.FS) error {
+	return global.LoadFromFs(fs)
 }
 
-func LoadDir(dir string) error {
+func LoadFromMap(m map[string]any, prefix string) {
+	global.LoadFromMap(m, prefix)
+}
+
+func LoadFromDir(dir string) error {
 	return global.loadDir(dir)
 }
 
-func GetAllTR() map[string]string {
+func LoadFromString(s string, umf UnmarshalFunc) error {
+	return global.LoadFromString(s, umf)
+}
+
+func LoadFromBytes(bs []byte, umf UnmarshalFunc) error {
+	return global.LoadFromBytes(bs, umf)
+}
+
+func GetAllTr() map[string]*MessageObject {
 	return global.GetAllTR()
 }
 
-func TR(key string, ms ...map[string]any) string {
-	return global.TR(key, ms...)
-}
-
-func Language() language.Tag {
-	return global.Language()
+func Tr(key string, ms ...map[string]any) (string, error) {
+	return global.Tr(key, ms...)
 }
 
 func (b *Bundle) flatten(prefix string, data any) {
 	switch val := data.(type) {
 	case string:
-		b.all[prefix] = val
+		b.all[prefix] = nil
+		b.all[prefix] = NewMessage(prefix, val)
+		b.updateList = append(b.updateList, prefix)
 	case float64, int:
 		s := fmt.Sprint(val)
-		b.all[prefix] = s
+		b.all[prefix] = nil
+		b.all[prefix] = NewMessage(prefix, s)
+		b.updateList = append(b.updateList, prefix)
 	case []any:
 		for i := 0; i < len(val); i++ {
 			pf := strings.Join([]string{prefix, fmt.Sprintf("[%d]", i)}, ".")
@@ -86,7 +150,7 @@ func (b *Bundle) flatten(prefix string, data any) {
 	}
 }
 
-func (b *Bundle) LoadFile(path string) error {
+func (b *Bundle) LoadFromFile(path string) error {
 	stat, err := os.Stat(path)
 	if os.IsNotExist(err) {
 		return fmt.Errorf("si18n: load: %w:%s", err, path)
@@ -125,6 +189,8 @@ func (b *Bundle) loadBytes(bs []byte, unmarshaler UnmarshalFunc) error {
 	if len(bs) == 0 {
 		return ErrEmpty
 	}
+	b.lock.Lock()
+	defer b.lock.Unlock()
 
 	var val any
 	var err error
@@ -153,11 +219,11 @@ func (b *Bundle) loadBytes(bs []byte, unmarshaler UnmarshalFunc) error {
 	return nil
 }
 
-func (b *Bundle) LoadString(s string, umf UnmarshalFunc) error {
-	return b.LoadBytes([]byte(s), umf)
+func (b *Bundle) LoadFromString(s string, umf UnmarshalFunc) error {
+	return b.LoadFromBytes([]byte(s), umf)
 }
 
-func (b *Bundle) LoadBytes(bs []byte, umf UnmarshalFunc) error {
+func (b *Bundle) LoadFromBytes(bs []byte, umf UnmarshalFunc) error {
 	err := b.loadBytes(bs, umf)
 	if err != nil {
 		return fmt.Errorf("si18n: load: %w", err)
@@ -165,7 +231,9 @@ func (b *Bundle) LoadBytes(bs []byte, umf UnmarshalFunc) error {
 	return nil
 }
 
-func (b *Bundle) LoadMap(m map[string]any, prefix string) {
+func (b *Bundle) LoadFromMap(m map[string]any, prefix string) {
+	b.lock.Lock()
+	defer b.lock.Unlock()
 	for k, v := range m {
 		if len(prefix) == 0 {
 			b.flatten(k, v)
@@ -175,7 +243,7 @@ func (b *Bundle) LoadMap(m map[string]any, prefix string) {
 	}
 }
 
-func (b *Bundle) LoadFs(f *embed.FS) error {
+func (b *Bundle) LoadFromFs(f *embed.FS) error {
 	var targetDir string
 	_, err := f.ReadDir(b.lang.String())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
@@ -215,7 +283,7 @@ func (b *Bundle) LoadFs(f *embed.FS) error {
 	})
 }
 
-func (b *Bundle) LoadDir(dir string) error {
+func (b *Bundle) LoadFromDir(dir string) error {
 	rootStat, err := os.Stat(dir)
 	// check rootStat is a dir
 	if rootStat != nil && !rootStat.IsDir() {
@@ -282,19 +350,77 @@ func (b *Bundle) loadDir(dir string) error {
 	})
 }
 
-func (b *Bundle) TR(key string, arg ...map[string]any) string {
-	che, ok := b.cache.Get(key)
-	if ok {
-		return che
+func (b *Bundle) Tr2Writer(key string, writer io.Writer, ms ...map[string]any) error {
+	b.updateAllMessage()
+	messageObj, ok := b.cache.Get(key)
+	if !ok {
+		messageObj, ok = b.all[key]
+		if !ok {
+			return fmt.Errorf("si18n: tr: %w:%s", ErrNotFound, key)
+		}
+		b.cache.Put(key, messageObj)
 	}
-	res, ok := b.all[key]
-	if ok {
-		b.cache.Put(key, res)
+	t, err := messageObj.Template()
+	if err != nil {
+		return fmt.Errorf("si18n: tr: %w", err)
 	}
-	return res
+	err = t.Execute(writer, mergeMap(ms...))
+	if err != nil {
+		return fmt.Errorf("si18n: tr: %w", err)
+	}
+	return nil
 }
 
-func (b *Bundle) GetAllTR() map[string]string {
+func (b *Bundle) Tr(key string, ms ...map[string]any) (string, error) {
+	res := &strings.Builder{}
+	err := b.Tr2Writer(key, res, ms...)
+	return res.String(), err
+}
+
+func (b *Bundle) TryTr(key string, ms ...map[string]any) string {
+	res := &strings.Builder{}
+	b.TryTr2Writer(key, res, ms...)
+	return res.String()
+}
+
+func (b *Bundle) MustTr(key string, ms ...map[string]any) string {
+	res := &strings.Builder{}
+	err := b.Tr2Writer(key, res, ms...)
+	if err != nil {
+		panic(err)
+	}
+	return res.String()
+}
+
+func (b *Bundle) TryTr2Writer(key string, writer io.Writer, ms ...map[string]any) {
+	err := b.Tr2Writer(key, writer, ms...)
+	if err != nil {
+		if errors.Is(err, ErrNotFound) {
+			_, _ = writer.Write([]byte(""))
+		}
+	}
+}
+
+func (b *Bundle) MustTr2Writer(key string, writer io.Writer, ms ...map[string]any) {
+	if err := b.Tr2Writer(key, writer, ms...); err != nil {
+		panic(err)
+	}
+}
+
+func (b *Bundle) updateAllMessage() {
+	if len(b.updateList) == 0 {
+		return
+	}
+	for i := 0; i < len(b.updateList); i++ {
+		b.all[b.updateList[i]].Update()
+		b.cache.Remove(b.updateList[i])
+	}
+	b.updateList = []string{}
+}
+
+func (b *Bundle) GetAllTR() map[string]*MessageObject {
+	b.lock.RLock()
+	defer b.lock.RUnlock()
 	return b.all
 }
 
@@ -306,6 +432,7 @@ func New(tag language.Tag) *Bundle {
 	return &Bundle{
 		lang:  tag,
 		cache: newLRUCache(64),
-		all:   make(map[string]string),
+		all:   make(map[string]*MessageObject),
+		lock:  &sync.RWMutex{},
 	}
 }
