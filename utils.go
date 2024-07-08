@@ -137,10 +137,16 @@ func mergeMap(ms ...map[string]any) map[string]any {
 	if len(ms) == 0 {
 		return nil
 	}
-	for i := 1; i < len(ms); i++ {
+	start := 0
+	for ; ms[start] == nil; start++ {
+	}
+	for i := start + 1; i < len(ms); i++ {
+		if ms[i] == nil {
+			continue
+		}
 		for k, v := range ms[i] {
-			ms[0][k] = v
+			ms[start][k] = v
 		}
 	}
-	return ms[0]
+	return ms[start]
 }
