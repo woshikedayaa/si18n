@@ -68,12 +68,19 @@ func (m *MessageObject) MustTemplate() *template.Template {
 	}
 }
 
+type NotFoundHandler func(key string, writer io.Writer, ms ...map[string]any)
+
 type Bundle struct {
-	lang       language.Tag
-	cache      *LRUCache
-	all        map[string]*MessageObject
-	lock       *sync.RWMutex
-	updateList []string
+	lang            language.Tag
+	cache           *LRUCache
+	all             map[string]*MessageObject
+	lock            *sync.RWMutex
+	updateList      []string
+	notFoundHandler NotFoundHandler
+}
+
+func (b *Bundle) NotFoundHandler(handler NotFoundHandler) {
+	b.notFoundHandler = handler
 }
 
 func (b *Bundle) flatten(prefix string, data any) {
@@ -342,10 +349,7 @@ func (b *Bundle) TryTr(key string, ms ...map[string]any) string {
 
 func (b *Bundle) MustTr(key string, ms ...map[string]any) string {
 	res := &strings.Builder{}
-	err := b.Tr2Writer(key, res, ms...)
-	if err != nil {
-		panic(err)
-	}
+	b.MustTr2Writer(key, res, ms...)
 	return res.String()
 }
 
@@ -353,7 +357,9 @@ func (b *Bundle) TryTr2Writer(key string, writer io.Writer, ms ...map[string]any
 	err := b.Tr2Writer(key, writer, ms...)
 	if err != nil {
 		if errors.Is(err, ErrNotFound) {
-			_, _ = writer.Write([]byte(""))
+			b.notFoundHandler(key, writer, ms...)
+		} else {
+			// noop
 		}
 	}
 }
@@ -386,10 +392,14 @@ func (b *Bundle) Language() language.Tag {
 }
 
 func New(tag language.Tag) *Bundle {
-	return &Bundle{
+	b := &Bundle{
 		lang:  tag,
 		cache: newLRUCache(64),
 		all:   make(map[string]*MessageObject),
 		lock:  &sync.RWMutex{},
 	}
+	b.notFoundHandler = func(key string, writer io.Writer, ms ...map[string]any) {
+		_, _ = writer.Write([]byte(""))
+	}
+	return b
 }
