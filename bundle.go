@@ -22,7 +22,6 @@ var (
 	ErrTargetIsDir                 = errors.New("target path is a dir")
 	ErrIncorrectBytesUnmarshalFunc = errors.New("incorrect bytes unmarshaler")
 	ErrNotFound                    = errors.New("can not found translation for this key")
-	ErrKeyType                     = errors.New("key type incorrect,except: float int string")
 )
 
 type MessageObject struct {
@@ -75,48 +74,6 @@ type Bundle struct {
 	all        map[string]*MessageObject
 	lock       *sync.RWMutex
 	updateList []string
-}
-
-var (
-	defaultLanguage = SystemLanguage()
-	global          = New(defaultLanguage)
-)
-
-func SwitchDefaultLanguage(lang language.Tag) {
-	global = New(lang)
-	defaultLanguage = lang
-}
-
-func LoadFromFile(path string) error {
-	return global.LoadFromFile(path)
-}
-
-func LoadFromFS(fs *embed.FS) error {
-	return global.LoadFromFs(fs)
-}
-
-func LoadFromMap(m map[string]any, prefix string) {
-	global.LoadFromMap(m, prefix)
-}
-
-func LoadFromDir(dir string) error {
-	return global.loadDir(dir)
-}
-
-func LoadFromString(s string, umf UnmarshalFunc) error {
-	return global.LoadFromString(s, umf)
-}
-
-func LoadFromBytes(bs []byte, umf UnmarshalFunc) error {
-	return global.LoadFromBytes(bs, umf)
-}
-
-func GetAllTr() map[string]*MessageObject {
-	return global.GetAllTR()
-}
-
-func Tr(key string, ms ...map[string]any) (string, error) {
-	return global.Tr(key, ms...)
 }
 
 func (b *Bundle) flatten(prefix string, data any) {
