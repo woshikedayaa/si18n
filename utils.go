@@ -3,6 +3,7 @@ package si18n
 import (
 	"container/list"
 	"encoding/json"
+	"fmt"
 	"github.com/BurntSushi/toml"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
@@ -12,16 +13,16 @@ import (
 	"strings"
 )
 
-func fileTyp(typ string) string {
+func parseFormat(typ string) (string, error) {
 	switch typ {
 	case "yaml", "yml", "toml", "json":
-		return typ
+		return typ, nil
 	default:
-		return ""
+		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, typ)
 	}
 }
 
-func GetUnmarshalFunc(typ string) UnmarshalFunc {
+func getUnmarshalFunc(typ string) UnmarshalFunc {
 	var umf UnmarshalFunc = nil
 	// choose UnmarshalFunc
 	switch typ {
@@ -29,7 +30,7 @@ func GetUnmarshalFunc(typ string) UnmarshalFunc {
 		umf = yaml.Unmarshal
 	case "toml":
 		umf = toml.Unmarshal
-	case "json", "json5":
+	case "json":
 		umf = json.Unmarshal
 	}
 	return umf
