@@ -17,7 +17,7 @@ import (
 
 var (
 	ErrEmpty                       = errors.New("empty")
-	ErrUnsupportedFileType         = errors.New("unsupported file type")
+	ErrUnsupportedFormat           = errors.New("unsupported format")
 	ErrTargetIsRegular             = errors.New("target path is a regular file")
 	ErrTargetIsDir                 = errors.New("target path is a dir")
 	ErrIncorrectBytesUnmarshalFunc = errors.New("incorrect bytes unmarshaler")
@@ -137,16 +137,12 @@ func (b *Bundle) loadFile(path string) error {
 		return err
 	}
 	// read the suffix
-	typ := ""
 	ss := strings.Split(filepath.Base(path), ".")
-	if len(ss) <= 1 || len(fileTyp(ss[len(ss)-1])) == 0 {
-		if len(ss) > 1 {
-			typ = ss[len(ss)-1]
-		}
-		return fmt.Errorf("%w: %s", ErrUnsupportedFileType, typ)
+	format, err := parseFormat(ss[len(ss)-1])
+	if err != nil {
+		return err
 	}
-	typ = ss[len(ss)-1]
-	return b.loadBytes(buf, GetUnmarshalFunc(typ))
+	return b.loadBytes(buf, getUnmarshalFunc(format))
 }
 
 func (b *Bundle) loadBytes(bs []byte, unmarshaler UnmarshalFunc) error {
@@ -207,6 +203,22 @@ func (b *Bundle) LoadFromMap(m map[string]any, prefix string) {
 	}
 }
 
+func (b *Bundle) LoadFromReader(r io.Reader, format string) error {
+	all, err := io.ReadAll(r)
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w", err)
+	}
+	f, err := parseFormat(format)
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w", err)
+	}
+	err = b.loadBytes(all, getUnmarshalFunc(f))
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w", err)
+	}
+	return nil
+}
+
 func (b *Bundle) LoadFromFs(f *embed.FS) error {
 	var targetDir string
 	_, err := f.ReadDir(b.lang.String())
@@ -218,33 +230,36 @@ func (b *Bundle) LoadFromFs(f *embed.FS) error {
 	} else {
 		targetDir = b.lang.String()
 	}
-	return fs.WalkDir(f, targetDir, func(path string, d fs.DirEntry, err error) error {
+	err = fs.WalkDir(f, targetDir, func(path string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
 		if d.IsDir() {
 			return nil
 		}
+		ss := strings.Split(filepath.Base(path), ".")
+		if len(ss) <= 1 {
+			return nil
+		}
+		format, err := parseFormat(ss[len(ss)-1])
+		if err != nil {
+			// skip this file
+			return nil
+		}
 		data, err2 := f.ReadFile(path)
 		if err2 != nil {
 			return err2
 		}
-		typ := ""
-		ss := strings.Split(path, ".")
-		if len(ss) <= 1 || len(fileTyp(ss[len(ss)-1])) == 0 {
-			if len(ss) > 1 {
-				typ = ss[len(ss)-1]
-			}
-			// skip
-			return nil
-		}
-		typ = ss[len(ss)-1]
-		err2 = b.loadBytes(data, GetUnmarshalFunc(typ))
+		err2 = b.loadBytes(data, getUnmarshalFunc(format))
 		if err2 != nil {
-			return fmt.Errorf("si18n: load: %w", err2)
+			return err2
 		}
 		return nil
 	})
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w", err)
+	}
+	return nil
 }
 
 func (b *Bundle) LoadFromDir(dir string) error {
