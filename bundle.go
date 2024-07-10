@@ -377,7 +377,7 @@ func (b *Bundle) loadDir(dir string) error {
 }
 
 func (b *Bundle) Tr2Writer(key string, writer io.Writer, ms ...map[string]any) error {
-	b.updateAllMessage()
+	b.update()
 	messageObj, ok := b.cache.Get(key)
 	if !ok {
 		messageObj, ok = b.all[key]
@@ -432,13 +432,22 @@ func (b *Bundle) MustTr2Writer(key string, writer io.Writer, ms ...map[string]an
 	}
 }
 
-func (b *Bundle) updateAllMessage() {
+func (b *Bundle) update() {
 	if len(b.updateList) == 0 {
 		return
 	}
 	for i := 0; i < len(b.updateList); i++ {
 		b.all[b.updateList[i]].Update()
+		// remove it from cache
 		b.cache.Remove(b.updateList[i])
+	}
+	// resize the cache
+	if len(b.all) <= 1024 {
+		if len(b.all)/3 >= 64 {
+			b.cache.Resize(len(b.all) / 3)
+		}
+	} else {
+		b.cache.Resize(len(b.all) / 4)
 	}
 	b.updateList = []string{}
 }
