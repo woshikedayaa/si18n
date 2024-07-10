@@ -3,7 +3,6 @@ package si18n
 import (
 	"container/list"
 	"encoding/json"
-	"fmt"
 	"github.com/BurntSushi/toml"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
@@ -18,7 +17,7 @@ func parseFormat(typ string) (string, error) {
 	case "yaml", "yml", "toml", "json":
 		return typ, nil
 	default:
-		return "", fmt.Errorf("%w: %s", ErrUnsupportedFormat, typ)
+		return "", ErrUnsupportedFormat
 	}
 }
 
