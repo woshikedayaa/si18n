@@ -161,3 +161,7 @@ func mergeMap(ms ...map[string]any) map[string]any {
 	}
 	return ms[start]
 }
+
+func errorWarp(err error) error {
+	return fmt.Errorf("%s: %w", "si18n", err)
+}

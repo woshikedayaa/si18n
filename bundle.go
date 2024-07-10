@@ -122,14 +122,14 @@ func (b *Bundle) flatten(prefix string, data any) {
 func (b *Bundle) LoadFromFile(path string) error {
 	stat, err := os.Stat(path)
 	if os.IsNotExist(err) {
-		return fmt.Errorf("si18n: load: %w:%s", err, path)
+		return errorWarp(fmt.Errorf("LoadFromFile: %w: %s", err, path))
 	}
 	if stat.IsDir() {
-		return fmt.Errorf("si18n: load: %w:%s", ErrTargetIsDir, path)
+		return errorWarp(fmt.Errorf("LoadFromFile: %w: %s", ErrTargetIsDir, path))
 	}
 	err = b.loadFile(path)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromFile: %w", err))
 	}
 	return nil
 }
@@ -191,7 +191,7 @@ func (b *Bundle) LoadFromString(s string, umf UnmarshalFunc) error {
 func (b *Bundle) LoadFromBytes(bs []byte, umf UnmarshalFunc) error {
 	err := b.loadBytes(bs, umf)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromBytes: %w", err))
 	}
 	return nil
 }
@@ -211,41 +211,41 @@ func (b *Bundle) LoadFromMap(m map[string]any, prefix string) {
 func (b *Bundle) LoadFromHttp(u string, format string) error {
 	up, err := url.Parse(u)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w: %s", err, u)
+		return errorWarp(fmt.Errorf("LoadFromHttp: parseurl: %w", err))
 	}
 	if len(up.Scheme) == 0 {
 		up.Scheme = "http"
 	}
 
 	if up.Scheme != "http" && up.Scheme != "https" {
-		return fmt.Errorf("si18n: load: %w: %s .except %s,%s", ErrIncorrectRemoteProtocol, up.Scheme, "http", "https")
+		return errorWarp(fmt.Errorf("LoadFromHttp: %w: %s .except %s,%s", ErrIncorrectRemoteProtocol, up.Scheme, "http", "https"))
 	}
 	if len(format) == 0 {
 		// auto get format from url path
 		base := path.Base(up.Path)
 		ss := strings.Split(base, ".")
 		if len(ss) <= 1 {
-			return fmt.Errorf("si18n: load: %w", ErrUnknownFormat)
+			return errorWarp(fmt.Errorf("LoadFromHttp: %w", ErrUnknownFormat))
 		}
 		format = ss[len(ss)-1]
 	}
 	ft, err := parseFormat(format)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w: %s", err, format)
+		return errorWarp(fmt.Errorf("LoadFromHttp: %w: %s", err, format))
 	}
 	u = up.String()
 	resp, err := http.Get(u)
 	if err != nil {
-		return fmt.Errorf("si18n: load: get %s error %w", u, err)
+		return errorWarp(fmt.Errorf("LoadFromHttp: get: %s error %w", u, err))
 	}
 	defer resp.Body.Close()
 	bytes, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return fmt.Errorf("si8n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromHttp: read: %w", err))
 	}
 	err = b.loadBytes(bytes, getUnmarshalFunc(ft))
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromHttp: parse: %w", err))
 	}
 	return nil
 }
@@ -253,15 +253,15 @@ func (b *Bundle) LoadFromHttp(u string, format string) error {
 func (b *Bundle) LoadFromReader(r io.Reader, format string) error {
 	all, err := io.ReadAll(r)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromReader: %w", err))
 	}
 	f, err := parseFormat(format)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w: %s", err, format)
+		return errorWarp(fmt.Errorf("LoadFromReader: %w: %s", err, format))
 	}
 	err = b.loadBytes(all, getUnmarshalFunc(f))
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromReader: %w", err))
 	}
 	return nil
 }
@@ -270,7 +270,7 @@ func (b *Bundle) LoadFromFs(f *embed.FS) error {
 	var targetDir string
 	_, err := f.ReadDir(b.lang.String())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromFs: %w", err))
 	}
 	if errors.Is(err, os.ErrNotExist) {
 		targetDir = "."
@@ -304,7 +304,7 @@ func (b *Bundle) LoadFromFs(f *embed.FS) error {
 		return nil
 	})
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromFs: %w", err))
 	}
 	return nil
 }
@@ -313,29 +313,29 @@ func (b *Bundle) LoadFromDir(dir string) error {
 	rootStat, err := os.Stat(dir)
 	// check rootStat is a dir
 	if rootStat != nil && !rootStat.IsDir() {
-		return fmt.Errorf("si18n: load: %w: %s", ErrTargetIsRegular, dir)
+		return errorWarp(fmt.Errorf("LoadFromDir: %w: %s", ErrTargetIsRegular, dir))
 	}
 
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w: %s", err, dir)
+		return errorWarp(fmt.Errorf("LoadFromDir: %w: %s", err, dir))
 	}
 
 	// find if there is a dir named b.lang.String()
 	stat, err := os.Stat(filepath.Join(dir, b.lang.String()))
 	if err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromDir: %w", err))
 	}
 	if stat != nil && stat.IsDir() {
 		err = b.loadDir(filepath.Join(dir, b.lang.String()))
 		if err != nil {
-			return fmt.Errorf("si18n: load: %w", err)
+			return errorWarp(fmt.Errorf("LoadFromDir: %w", err))
 		}
 		return nil
 	}
 	// just read files
 	files, err := os.ReadDir(dir)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return errorWarp(fmt.Errorf("LoadFromDir: %w", err))
 	}
 
 	availableList := map[string]bool{
@@ -353,7 +353,7 @@ func (b *Bundle) LoadFromDir(dir string) error {
 	for i := 0; i < len(files); i++ {
 		err := b.loadFile(filepath.Join(dir, files[i].Name()))
 		if err != nil {
-			return fmt.Errorf("si18n: load: %w", err)
+			return errorWarp(fmt.Errorf("LoadFromDir: %w", err))
 		}
 	}
 	return nil
@@ -382,17 +382,17 @@ func (b *Bundle) Tr2Writer(key string, writer io.Writer, ms ...map[string]any) e
 	if !ok {
 		messageObj, ok = b.all[key]
 		if !ok {
-			return fmt.Errorf("si18n: tr: %w:%s", ErrNotFound, key)
+			return errorWarp(fmt.Errorf("Tr2Writer: %w: %s", ErrNotFound, key))
 		}
 		b.cache.Put(key, messageObj)
 	}
 	t, err := messageObj.Template()
 	if err != nil {
-		return fmt.Errorf("si18n: tr: %w", err)
+		return errorWarp(fmt.Errorf("Tr2Writer: exec: %w", err))
 	}
 	err = t.Execute(writer, mergeMap(ms...))
 	if err != nil {
-		return fmt.Errorf("si18n: tr: %w", err)
+		return errorWarp(fmt.Errorf("Tr2Writer: exec: %w", err))
 	}
 	return nil
 }
