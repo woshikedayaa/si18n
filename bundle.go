@@ -7,7 +7,10 @@ import (
 	"golang.org/x/text/language"
 	"io"
 	"io/fs"
+	"net/http"
+	"net/url"
 	"os"
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -18,10 +21,12 @@ import (
 var (
 	ErrEmpty                       = errors.New("empty")
 	ErrUnsupportedFormat           = errors.New("unsupported format")
+	ErrUnknownFormat               = errors.New("unknown format")
 	ErrTargetIsRegular             = errors.New("target path is a regular file")
 	ErrTargetIsDir                 = errors.New("target path is a dir")
 	ErrIncorrectBytesUnmarshalFunc = errors.New("incorrect bytes unmarshaler")
 	ErrNotFound                    = errors.New("can not found translation for this key")
+	ErrIncorrectRemoteProtocol     = errors.New("incorrect remote protocol")
 )
 
 type MessageObject struct {
@@ -203,6 +208,48 @@ func (b *Bundle) LoadFromMap(m map[string]any, prefix string) {
 	}
 }
 
+func (b *Bundle) LoadFromHttp(u string, format string) error {
+	up, err := url.Parse(u)
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w: %s", err, u)
+	}
+	if len(up.Scheme) == 0 {
+		up.Scheme = "http"
+	}
+
+	if up.Scheme != "http" && up.Scheme != "https" {
+		return fmt.Errorf("si18n: load: %w: %s .except %s,%s", ErrIncorrectRemoteProtocol, up.Scheme, "http", "https")
+	}
+	if len(format) == 0 {
+		// auto get format from url path
+		base := path.Base(up.Path)
+		ss := strings.Split(base, ".")
+		if len(ss) <= 1 {
+			return fmt.Errorf("si18n: load: %w", ErrUnknownFormat)
+		}
+		format = ss[len(ss)-1]
+	}
+	ft, err := parseFormat(format)
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w: %s", err, format)
+	}
+	u = up.String()
+	resp, err := http.Get(u)
+	if err != nil {
+		return fmt.Errorf("si18n: load: get %s error %w", u, err)
+	}
+	defer resp.Body.Close()
+	bytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("si8n: load: %w", err)
+	}
+	err = b.loadBytes(bytes, getUnmarshalFunc(ft))
+	if err != nil {
+		return fmt.Errorf("si18n: load: %w", err)
+	}
+	return nil
+}
+
 func (b *Bundle) LoadFromReader(r io.Reader, format string) error {
 	all, err := io.ReadAll(r)
 	if err != nil {
@@ -210,7 +257,7 @@ func (b *Bundle) LoadFromReader(r io.Reader, format string) error {
 	}
 	f, err := parseFormat(format)
 	if err != nil {
-		return fmt.Errorf("si18n: load: %w", err)
+		return fmt.Errorf("si18n: load: %w: %s", err, format)
 	}
 	err = b.loadBytes(all, getUnmarshalFunc(f))
 	if err != nil {

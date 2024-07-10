@@ -1,6 +1,7 @@
 package si18n
 
 import (
+	"net/http"
 	"strings"
 	"testing"
 )
@@ -120,6 +121,61 @@ a:
 		equals(v, bundle.TryTr(k, ms), t)
 		equals(v, bundle.MustTr(k, ms), t)
 		tr, err := bundle.Tr(k, ms)
+		isNil(err, t)
+		equals(v, tr, t)
+	}
+}
+
+func TestBundle_LoadFromHttp(t *testing.T) {
+	finish := make(chan struct{})
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /test", func(resp http.ResponseWriter, req *http.Request) {
+			_, _ = resp.Write([]byte(getExampleFileString()))
+		})
+		mux.HandleFunc("GET /test.yaml", func(resp http.ResponseWriter, req *http.Request) {
+			_, _ = resp.Write([]byte(getExampleFileString()))
+		})
+		finish <- struct{}{}
+		err := http.ListenAndServe("localhost:8080", mux)
+		isNil(err, t)
+	}()
+	<-finish
+
+	bundle := New(SystemLanguage())
+	err := bundle.LoadFromHttp("http://localhost:8080/test", "yaml")
+	isNil(err, t)
+	m := getExampleCorrectMap()
+	for k, v := range m {
+		equals(v, bundle.TryTr(k), t)
+		equals(v, bundle.MustTr(k), t)
+		tr, err := bundle.Tr(k)
+		isNil(err, t)
+		equals(v, tr, t)
+	}
+}
+
+func TestBundle_LoadFromHttpWithSuffix(t *testing.T) {
+	finish := make(chan struct{})
+	go func() {
+		mux := http.NewServeMux()
+		mux.HandleFunc("GET /test.yaml", func(resp http.ResponseWriter, req *http.Request) {
+			_, _ = resp.Write([]byte(getExampleFileString()))
+		})
+		finish <- struct{}{}
+		err := http.ListenAndServe("localhost:8081", mux)
+		isNil(err, t)
+	}()
+	<-finish
+
+	bundle := New(SystemLanguage())
+	err := bundle.LoadFromHttp("http://localhost:8081/test.yaml", "")
+	isNil(err, t)
+	m := getExampleCorrectMap()
+	for k, v := range m {
+		equals(v, bundle.TryTr(k), t)
+		equals(v, bundle.MustTr(k), t)
+		tr, err := bundle.Tr(k)
 		isNil(err, t)
 		equals(v, tr, t)
 	}
