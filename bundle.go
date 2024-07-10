@@ -25,7 +25,7 @@ var (
 	ErrTargetIsRegular             = errors.New("target path is a regular file")
 	ErrTargetIsDir                 = errors.New("target path is a dir")
 	ErrIncorrectBytesUnmarshalFunc = errors.New("incorrect bytes unmarshaler")
-	ErrNotFound                    = errors.New("can not found translation for this key")
+	ErrNotFound                    = errors.New("can not found translations")
 	ErrIncorrectRemoteProtocol     = errors.New("incorrect remote protocol")
 )
 
@@ -184,12 +184,12 @@ func (b *Bundle) loadBytes(bs []byte, unmarshaler UnmarshalFunc) error {
 	return nil
 }
 
-func (b *Bundle) LoadFromString(s string, umf UnmarshalFunc) error {
-	return b.LoadFromBytes([]byte(s), umf)
-}
-
-func (b *Bundle) LoadFromBytes(bs []byte, umf UnmarshalFunc) error {
-	err := b.loadBytes(bs, umf)
+func (b *Bundle) LoadFromBytes(bs []byte, format string) error {
+	ft, err := parseFormat(format)
+	if err != nil {
+		return errorWarp(fmt.Errorf("LoadFromBytes: %w: %s", err, format))
+	}
+	err = b.loadBytes(bs, getUnmarshalFunc(ft))
 	if err != nil {
 		return errorWarp(fmt.Errorf("LoadFromBytes: %w", err))
 	}
@@ -382,7 +382,7 @@ func (b *Bundle) Tr2Writer(key string, writer io.Writer, ms ...map[string]any) e
 	if !ok {
 		messageObj, ok = b.all[key]
 		if !ok {
-			return errorWarp(fmt.Errorf("Tr2Writer: %w: %s", ErrNotFound, key))
+			return errorWarp(fmt.Errorf("Tr2Writer: %w: lang: %s key: %s", ErrNotFound, b.lang, key))
 		}
 		b.cache.Put(key, messageObj)
 	}
