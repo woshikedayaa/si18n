@@ -3,6 +3,7 @@ package si18n
 import (
 	"container/list"
 	"encoding/json"
+	"errors"
 	"github.com/BurntSushi/toml"
 	"golang.org/x/text/language"
 	"gopkg.in/yaml.v2"
@@ -113,7 +114,7 @@ func (lru *LRUCache) Put(key string, val *MessageObject) {
 		return
 	}
 	lru.keyToNode[key] = lru.list.PushFront(entry{key, val})
-	if lru.Len() > lru.Cap() {
+	for lru.Len() > lru.Cap() {
 		delete(lru.keyToNode, lru.list.Remove(lru.list.Back()).(entry).key)
 	}
 }
@@ -131,6 +132,16 @@ func (lru *LRUCache) Remove(key string) bool {
 	}
 	delete(lru.keyToNode, lru.list.Remove(node).(entry).key)
 	return true
+}
+
+func (lru *LRUCache) Resize(capacity int) {
+	if capacity <= 0 {
+		panic(errors.New("LRUCache capacity must larger than zero"))
+	}
+	for lru.Len() > capacity {
+		delete(lru.keyToNode, lru.list.Remove(lru.list.Back()).(entry).key)
+	}
+	lru.capacity = capacity
 }
 
 func mergeMap(ms ...map[string]any) map[string]any {
