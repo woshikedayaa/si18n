@@ -266,7 +266,7 @@ func (b *Bundle) LoadFromReader(r io.Reader, format string) error {
 	return nil
 }
 
-func (b *Bundle) LoadFromFs(f *embed.FS) error {
+func (b *Bundle) LoadFromFs(f embed.FS) error {
 	var targetDir string
 	_, err := f.ReadDir(b.lang.String())
 	if err != nil && !errors.Is(err, os.ErrNotExist) {
